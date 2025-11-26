@@ -1,0 +1,13 @@
+/.venv
+/decoded_batches
+/foo.txt
+/parsed_output_auto
+/parsed_output_tmp
+/tmp_test.py
+/tmp_zip.py
+/work_in_capture
+/__pycache__
+/건보청구명세서.csv
+/자보청구명세서.csv
+/지시사항.txt
+/지시사항.txt.bak
