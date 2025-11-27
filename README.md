@@ -46,10 +46,10 @@ pip install pyinstaller
 2. Build the GUI batch parser into a single executable:
 
 ```bash
-pyinstaller --onefile --noconsole batch_ui.py
+pyinstaller --onefile --noconsole --name batch_extract_csv batch_ui.py
 ```
 
-The generated binary is written to `dist/batch_ui.exe`. Double-click it or run it from PowerShell to launch the folder-selection UI.
+The generated binary is written to `dist/batch_extract_csv.exe`. Double-click it or run it from PowerShell to launch the folder-selection UI.
 
 ## Output files
 
