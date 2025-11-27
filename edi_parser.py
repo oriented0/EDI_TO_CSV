@@ -1,8 +1,8 @@
 """Utilities for reconstructing patient and encounter data from EDI claim files.
 
 The script understands the fixed-width K020.* health-insurance claim layout that
-appears under folders such as ``test_source/mi/YYYYMM`` or
-``test_source/ta/YYYYMM``.  It reads the K020.1~K020.4 (health insurance) and
+appears under folders such as ``data/test_source/mi/YYYYMM`` or
+``data/test_source/ta/YYYYMM``.  It reads the K020.1~K020.4 (health insurance) and
 C110.1~C110.4 (auto insurance) files, extracts the patient master information,
 diagnosis rows, billing items, and merges line-level specific details directly
 into each encounter item, ultimately emitting CSV snapshots that mirror the
@@ -11,9 +11,9 @@ instructions text file.
 
 Usage example::
 
-    python edi_parser.py --source test_source --output-dir parsed_output
+    python edi_parser.py --source data/test_source --output-dir parsed_output
 
-The command above will look for every directory beneath ``test_source`` that
+The command above will look for every directory beneath ``data/test_source`` that
 contains either a ``K020.1`` or ``C110.1`` file, parse the companion ``*.2``
 through ``*.4`` files when present, and then materialize four CSV files inside
 the ``parsed_output`` directory:
@@ -370,6 +370,10 @@ class EDIClaimParser:
         self.base_path = base_path
         self.encoding = encoding
 
+    def discover_claim_dirs(self) -> List[Tuple[Path, ClaimFileLayout]]:
+        """Return every directory that contains a supported claim file."""
+        return self._discover_claim_dirs()
+
     def parse(self) -> Dict[str, EncounterRecord]:
         encounters: Dict[str, EncounterRecord] = {}
         claim_dirs = self._discover_claim_dirs()
@@ -680,6 +684,7 @@ def export_results(
     *,
     output_encoding: str = OUTPUT_ENCODING_DEFAULT,
 ) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
     sorted_encounters = [encounters[key] for key in sorted(encounters.keys())]
     patient_rows: List[Dict[str, str]] = []
     encounter_rows: List[Dict[str, str]] = []
@@ -709,7 +714,7 @@ def export_results(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Parse EDI K020.* claim files into CSV extracts")
-    parser.add_argument("--source", default="test_source/mi", help="Root directory that holds YYYYMM claim folders")
+    parser.add_argument("--source", default="data/test_source/mi", help="Root directory that holds YYYYMM claim folders")
     parser.add_argument("--output-dir", default="parsed_output", help="Destination directory for CSV files")
     parser.add_argument("--encoding", default=ENCODING_DEFAULT, help="Source file encoding (default: cp949)")
     parser.add_argument(

@@ -2,8 +2,8 @@
 
 Utilities for reconstructing patient and encounter level data from fixed-width
 EDI claim files. The script understands both the 건강보험 K020._ layout (for
-example, `test_source/mi/YYYYMM`) and the 자동차 보험 C110._ layout (for
-example, `test_source/ta/YYYYMM`) described in the root instructions text file.
+example, `data/test_source/mi/YYYYMM`) and the 자동차 보험 C110._ layout (for
+example, `data/test_source/ta/YYYYMM`) described in the root instructions text file.
 
 ## Requirements
 
@@ -13,13 +13,13 @@ example, `test_source/ta/YYYYMM`) described in the root instructions text file.
 ## Running the parser
 
 ```bash
-python edi_parser.py --source test_source --output-dir parsed_output
+python edi_parser.py --source data/test_source --output-dir parsed_output
 ```
 
 Command-line options:
 
 - `--source`: Root directory that contains month folders with `K020.*` or
-  `C110.*` files. Defaults to `test_source/mi`.
+  `C110.*` files. Defaults to `data/test_source/mi`.
 - `--output-dir`: Directory that will receive the generated CSV exports.
   Defaults to `parsed_output` (the folder is created automatically).
 - `--encoding`: Source file encoding. `cp949` works for the bundled data.
@@ -34,6 +34,22 @@ when present. Missing files are skipped with an informational log entry.
 `patients.csv` retains just the identifying fields (name, 주민번호 앞/뒤 자리,
 성별) together with `encounter_no`, so downstream systems can join patients to
 encounters while generating fresh `encounter_uuid` values inside the database.
+
+## Building a standalone EXE (PyInstaller)
+
+1. Activate the virtual environment (or ensure PyInstaller is available) and install it once:
+
+```bash
+pip install pyinstaller
+```
+
+2. Build the GUI batch parser into a single executable:
+
+```bash
+pyinstaller --onefile --noconsole batch_ui.py
+```
+
+The generated binary is written to `dist/batch_ui.exe`. Double-click it or run it from PowerShell to launch the folder-selection UI.
 
 ## Output files
 
