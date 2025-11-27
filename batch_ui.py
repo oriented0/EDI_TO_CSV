@@ -6,6 +6,7 @@ import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext
+from typing import Dict, List, Tuple
 
 from edi_parser import (
     ENCODING_DEFAULT,
@@ -97,14 +98,32 @@ class BatchParserUI:
             claim_dirs = parser.discover_claim_dirs()
             if not claim_dirs:
                 raise FileNotFoundError("해당 폴더에서 K020/C110 파일을 찾을 수 없습니다.")
-            self._log(f"발견한 청구 폴더: {len(claim_dirs)}개")
-            for path, layout in claim_dirs:
-                layout_label = "K020" if layout.patient_file.startswith("K020") else "C110"
-                self._log(f" - [{layout_label}] {path}")
-            encounters = parser.parse()
+            empty_children = self._find_empty_children(source, claim_dirs)
+            if empty_children:
+                self._log("추출 대상이 없는 하위 폴더:")
+                for child in empty_children:
+                    self._log(f" - {child}")
+            encounters, successes, failures, month_map = parser.parse_with_status()
+            self._log(f"추출 완료 폴더: {len(successes)}개")
+            if failures:
+                self._log(f"실패한 폴더: {len(failures)}개")
+                for path, reason in failures.items():
+                    self._log(f" - {path}: {reason}")
+            self._log("청구월 요약:")
+            summary_lines = self._format_month_summary(month_map)
+            for line in summary_lines:
+                self._log(f" - {line}")
             export_results(encounters, output, output_encoding=self.output_encoding_var.get())
-            self._log(f"완료: {len(encounters)}건 처리, 결과: {output}")
-            self.root.after(0, lambda: messagebox.showinfo("완료", f"총 {len(encounters)}건 처리했습니다."))
+            self._log(
+                f"완료: 총 {len(encounters)}건 처리 (성공 {len(successes)} 폴더, 실패 {len(failures)} 폴더). 결과: {output}"
+            )
+            self.root.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "완료",
+                    f"총 {len(encounters)}건 처리했고, {len(successes)}개 폴더 성공 / {len(failures)}개 폴더 실패했습니다.",
+                ),
+            )
         except Exception as exc:  # noqa: BLE001
             self._log(f"오류 발생: {exc}")
             self.root.after(0, lambda: messagebox.showerror("오류", str(exc)))
@@ -119,6 +138,57 @@ class BatchParserUI:
             self.log_widget.configure(state="disabled")
 
         self.root.after(0, append)
+
+    def _find_empty_children(self, source: Path, claim_dirs: List[Tuple[Path, object]]) -> List[Path]:
+        claim_paths = [path for path, _ in claim_dirs]
+        empty: List[Path] = []
+        try:
+            children = [child for child in source.iterdir() if child.is_dir()]
+        except FileNotFoundError:
+            return empty
+        for child in children:
+            has_claim = any(self._is_subpath(claim_path, child) for claim_path in claim_paths)
+            if not has_claim:
+                empty.append(child)
+        return empty
+
+    @staticmethod
+    def _is_subpath(path: Path, parent: Path) -> bool:
+        try:
+            path.relative_to(parent)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _format_month_summary(month_map: Dict[str, List[str]]) -> List[str]:
+        buckets: Dict[str, List[str]] = {"건보": [], "자보": []}
+        for kind, months in month_map.items():
+            buckets.setdefault(kind, []).extend(months)
+        lines: List[str] = []
+        for kind in ["건보", "자보"]:
+            months = sorted(set(buckets.get(kind, [])))
+            if not months:
+                continue
+            year_groups: Dict[str, List[str]] = {}
+            for month in months:
+                if "." in month:
+                    year = month.split(".", 1)[0]
+                else:
+                    year = "알수없음"
+                year_groups.setdefault(year, []).append(month)
+            indent = " " * (len(kind) + 3)
+            first = True
+            for year in sorted(year_groups.keys()):
+                segment = " ".join(year_groups[year])
+                if first:
+                    lines.append(f"{kind} : {segment}")
+                    first = False
+                else:
+                    lines.append(f"{indent}{segment}")
+        if not lines:
+            lines.append("청구월 정보를 찾을 수 없습니다.")
+        return lines
 
     def run(self) -> None:
         self.root.mainloop()

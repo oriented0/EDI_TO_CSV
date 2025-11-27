@@ -374,20 +374,70 @@ class EDIClaimParser:
         """Return every directory that contains a supported claim file."""
         return self._discover_claim_dirs()
 
-    def parse(self) -> Dict[str, EncounterRecord]:
+    def parse_with_status(
+        self,
+    ) -> Tuple[
+        Dict[str, EncounterRecord],
+        List[Path],
+        Dict[Path, str],
+        Dict[str, List[str]],
+    ]:
         encounters: Dict[str, EncounterRecord] = {}
         claim_dirs = self._discover_claim_dirs()
         if not claim_dirs:
             raise FileNotFoundError(f"Could not find any claim directories under {self.base_path}")
+        successes: List[Path] = []
+        failures: Dict[Path, str] = {}
+        month_map: Dict[str, List[str]] = {"건보": [], "자보": []}
         for claim_dir, layout in claim_dirs:
-            logging.info("Parsing claim folder %s", claim_dir)
-            claim_encounters = self._parse_claim_dir(claim_dir, layout)
+            try:
+                logging.info("Parsing claim folder %s", claim_dir)
+                claim_encounters = self._parse_claim_dir(claim_dir, layout)
+            except Exception as exc:  # noqa: BLE001
+                logging.exception("Failed to parse claim folder %s", claim_dir)
+                failures[claim_dir] = str(exc)
+                continue
+            successes.append(claim_dir)
+            month = self._extract_claim_month(claim_dir / layout.patient_file)
+            month_key = self._format_month(month) if month else "알수없음"
+            bucket = "건보" if layout is MI_LAYOUT else "자보"
+            month_map.setdefault(bucket, []).append(month_key)
             for encounter_no, record in claim_encounters.items():
                 if encounter_no in encounters:
                     self._merge_records(encounters[encounter_no], record)
                 else:
                     encounters[encounter_no] = record
+        return encounters, successes, failures, month_map
+
+    def parse(self) -> Dict[str, EncounterRecord]:
+        encounters, successes, failures, _ = self.parse_with_status()
+        if failures:
+            failed_list = ", ".join(str(path) for path in failures.keys())
+            raise RuntimeError(f"Failed to parse claim folders: {failed_list}")
         return encounters
+
+    def _extract_claim_month(self, patient_file: Path) -> Optional[str]:
+        if not patient_file.exists():
+            return None
+        try:
+            with patient_file.open("rb") as handle:
+                line = handle.readline()
+        except OSError:
+            return None
+        if not line:
+            return None
+        claim_no = self._slice_text(line.rstrip(b"\r\n"), 1, 10)
+        if len(claim_no) < 6:
+            return None
+        return claim_no[:6]
+
+    @staticmethod
+    def _format_month(value: Optional[str]) -> str:
+        if not value or len(value) != 6 or not value.isdigit():
+            return "알수없음"
+        year = value[:4]
+        month = value[4:6]
+        return f"{year}.{month}"
 
     def _merge_records(self, target: EncounterRecord, source: EncounterRecord) -> None:
         if source.patient and not target.patient:
